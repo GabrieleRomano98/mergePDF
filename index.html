@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Merge PDF Files</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+        <style>
+            body {
+                color: white;
+                background-color: black;
+                text-align: center;
+                font-family: "Funnel Sans", sans-serif;
+            }
+            h1 {
+                margin: 50px;
+            }
+            label {
+                margin-top: 20px;
+                font-size: 24px;
+            }
+            input[type="file"] {
+                display: none;
+            }
+            label, button {
+                padding: 10px 20px;
+                font-size: 18px;
+                cursor: pointer;
+                background-color: #9b46e9;
+                color: rgb(255, 255, 255);
+                border: none;
+                border-radius: 5px;
+            }
+            label:hover, button:hover {
+                background-color: #7334ad;
+            }
+            button:disabled, button:disabled:hover {
+                background-color: #555;
+            }
+            #file-list {
+                display: grid;
+                grid-template-columns: auto auto auto auto;
+                gap: 20px;
+                width: fit-content;
+                margin: 30px;
+                overflow-y: auto;
+                max-height: 350px;
+                scrollbar-width: thin;
+                scrollbar-color: #ffffff #ffffff00;
+                padding: 10px;
+            }
+            .file-item {
+                background-color: #383838;
+                color: white;
+                max-width: fit-content;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: default;
+                border: #7d7d7d 1px solid;
+            }
+            .remove-file {
+                margin-left: 10px;
+                cursor: pointer;
+            }
+        </style>
+    </head>
+    <body>
+    
+    <h1>Merge PDF Files</h1>
+    <label for="loader" id="loader-label">Select PDF files</label>
+    <input type="file" id="loader" name="loader" accept="application/pdf" multiple />
+    <div style="display: flex; justify-content: center; align-items: center;"><div id="file-list"></div></div>
+    <div>
+        <div></div>
+        <button id="merge-btn" disabled>Download</button>
+    </div>
+
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script>
+    const loader = document.getElementById('loader');
+    let filesToMerge = [];
+    const fileList = document.getElementById('file-list');
+    function updateFileList() {
+        mergeBtn.disabled = filesToMerge.length === 0;
+        fileList.innerHTML = filesToMerge.map((file, i) => `
+            <div class="file-item" id="file-${i}"><div>${file.name}</div><div class="remove-file" onclick="removeFile(${i})">❌️</div></div>
+        `).join('');
+    }
+    loader.addEventListener('change', (event) => {
+        filesToMerge = filesToMerge.concat([...event.target.files]);
+        updateFileList();
+    });
+    function removeFile(index) {
+        filesToMerge = filesToMerge.filter((_, i) => i !== index);
+        updateFileList();
+    }
+    const mergeBtn = document.getElementById('merge-btn');
+    mergeBtn.addEventListener('click', async () => {
+        if (filesToMerge.length === 0) {
+            alert('Please select at least one PDF file.');
+            return;
+        }
+
+        try {
+            mergeBtn.disabled = true;
+            mergeBtn.textContent = 'Merging...';
+
+            const mergedPdf = await PDFLib.PDFDocument.create();
+
+            for (const file of filesToMerge) {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await PDFLib.PDFDocument.load(arrayBuffer);
+                const pages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+                pages.forEach(page => mergedPdf.addPage(page));
+            }
+
+            const mergedBytes = await mergedPdf.save();
+            const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'merged.pdf';
+            link.click();
+
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error merging PDFs:', error);
+            alert('Error merging PDFs: ' + error.message);
+        } finally {
+            mergeBtn.disabled = false;
+            mergeBtn.textContent = 'Download';
+        }
+    });
+    </script>
+    </body>
+</html>
