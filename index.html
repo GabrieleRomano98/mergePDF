@@ -71,7 +71,14 @@
     <body>
     
     <h1>Merge PDF Files</h1>
-    <label for="loader" id="loader-label">Select PDF files</label>
+    <div style="margin-bottom: 20px;">
+        <label for="file-type" style="background: none; color: white; font-size: 20px; padding: 0; cursor: default;">files to merge</label>
+        <select id="file-type" style="margin-left: 10px; font-size: 18px; padding: 5px 10px; border-radius: 5px;">
+            <option value="pdf">PDF</option>
+            <option value="images">Images</option>
+        </select>
+    </div>
+    <label for="loader" id="loader-label">Select files</label>
     <input type="file" id="loader" name="loader" accept="application/pdf" multiple />
     <div style="display: flex; justify-content: center; align-items: center;"><div id="file-list"></div></div>
     <div>
@@ -82,8 +89,10 @@
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script>
     const loader = document.getElementById('loader');
+    const fileType = document.getElementById('file-type');
     let filesToMerge = [];
     const fileList = document.getElementById('file-list');
+    const loaderLabel = document.getElementById('loader-label');
     function updateFileList() {
         mergeBtn.disabled = filesToMerge.length === 0;
         fileList.innerHTML = filesToMerge.map((file, i) => `
@@ -98,10 +107,19 @@
         filesToMerge = filesToMerge.filter((_, i) => i !== index);
         updateFileList();
     }
+    fileType.addEventListener('change', () => {
+        filesToMerge = [];
+        updateFileList();
+        if (fileType.value === 'pdf') {
+            loader.accept = 'application/pdf';
+        } else {
+            loader.accept = 'image/png, image/jpeg, image/jpg, image/gif, image/bmp, image/webp';
+        }
+    });
     const mergeBtn = document.getElementById('merge-btn');
     mergeBtn.addEventListener('click', async () => {
         if (filesToMerge.length === 0) {
-            alert('Please select at least one PDF file.');
+            alert('Please select at least one file.');
             return;
         }
 
@@ -110,23 +128,35 @@
             mergeBtn.textContent = 'Merging...';
 
             const mergedPdf = await PDFLib.PDFDocument.create();
-
             for (const file of filesToMerge) {
                 const arrayBuffer = await file.arrayBuffer();
-                const pdf = await PDFLib.PDFDocument.load(arrayBuffer);
-                const pages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-                pages.forEach(page => mergedPdf.addPage(page));
+                if (file.type === 'application/pdf' && fileType.value === 'pdf') {
+                    const pdf = await PDFLib.PDFDocument.load(arrayBuffer);
+                    const pages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+                    pages.forEach(page => mergedPdf.addPage(page));
+                } else if (file.type.startsWith('image/') && fileType.value === 'images') {
+                    let img;
+                    if (file.type === 'image/png') {
+                        img = await mergedPdf.embedPng(arrayBuffer);
+                    } else {
+                        img = await mergedPdf.embedJpg(arrayBuffer);
+                    }
+                    const page = mergedPdf.addPage([img.width, img.height]);
+                    page.drawImage(img, {
+                        x: 0, width: img.width,
+                        y: 0, height: img.height
+                    });
+                } else {
+                    throw new Error(`Unsupported file type: ${file.name}`);
+                }
             }
-
             const mergedBytes = await mergedPdf.save();
             const blob = new Blob([mergedBytes], { type: 'application/pdf' });
             const url = URL.createObjectURL(blob);
-
             const link = document.createElement('a');
             link.href = url;
             link.download = 'merged.pdf';
             link.click();
-
             URL.revokeObjectURL(url);
         } catch (error) {
             console.error('Error merging PDFs:', error);
